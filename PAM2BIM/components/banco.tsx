@@ -1,114 +1,150 @@
-import React, { useState } from "react"; // Importar useState para gerenciar o estado do TextInput
-import { View, Button, TextInput } from "react-native";
+import React, { useState, useEffect } from "react";
+import { View, Button, TextInput, Text, ScrollView, Alert } from "react-native";
 import * as SQLite from "expo-sqlite";
 
-const banco = () => {
-  const [nomeParaDeletar, setNomeParaDeletar] = useState(""); // Definir o estado para o nome a ser deletado
+// Abrir o banco só uma vez
+const db = SQLite.openDatabaseSync("PAM2");
 
-  async function criaBanco() {
-    const db = await SQLite.openDatabaseAsync("PAM2");
-    if (db) {
-      console.log("Banco criado");
-    } else {
-      console.log("Erro ao criar o banco");
-    }
-  }
+const Banco = () => {
+  const [nome, setNome] = useState("");
+  const [nomeAntigo, setNomeAntigo] = useState("");
+  const [nomeNovo, setNomeNovo] = useState("");
+  const [usuarios, setUsuarios] = useState([]);
 
-  // Criar tabela
+  // Criar tabela ao iniciar
+  useEffect(() => {
+    criarTabela();
+  }, []);
+
   async function criarTabela() {
-    const db = await SQLite.openDatabaseAsync("PAM2");
-    if (db) {
+    try {
       await db.execAsync(`
         PRAGMA journal_mode = WAL;
-        CREATE TABLE IF NOT EXISTS TB_usuarios (id INTEGER PRIMARY KEY NOT NULL, Nome TEXT NOT NULL);
+        CREATE TABLE IF NOT EXISTS TB_usuarios (
+          id INTEGER PRIMARY KEY NOT NULL,
+          Nome TEXT NOT NULL
+        );
       `);
       console.log("Tabela criada");
-    } else {
-      console.log("Erro ao criar a tabela");
+    } catch (error) {
+      console.error("Erro ao criar tabela:", error);
     }
   }
 
-  // Inserir dados na tabela
   async function inserir() {
-    const db = await SQLite.openDatabaseAsync("PAM2");
-    if (db) {
-      await db.execAsync(`
-        PRAGMA journal_mode = WAL;
-        INSERT INTO TB_usuarios (Nome) VALUES ('Cláudio'),('Renata'),('Gabriela');
-      `);
-      console.log("Inserido");
-    } else {
-      console.log("Erro ao inserir");
+    if (!nome.trim()) {
+      Alert.alert("Erro", "Digite um nome válido para inserir.");
+      return;
+    }
+
+    try {
+      await db.runAsync("INSERT INTO TB_usuarios (Nome) VALUES (?)", [nome]);
+      console.log("Usuário inserido");
+      setNome("");
+      exibir();
+    } catch (error) {
+      console.error("Erro ao inserir:", error);
     }
   }
 
-  // Exibir dados
   async function exibir() {
-    const db = await SQLite.openDatabaseAsync("PAM2");
-    if (db) {
-      const allRows = await db.getAllAsync("SELECT * FROM TB_usuarios");
-      for (const row of allRows) {
-        console.log(row.id, row.Nome);
-      }
-    } else {
-      console.log("Erro ao exibir");
+    try {
+      const results = await db.getAllAsync("SELECT * FROM TB_usuarios");
+      setUsuarios(results);
+    } catch (error) {
+      console.error("Erro ao exibir:", error);
     }
   }
 
-  // Função para deletar um usuário com base no nome
   async function deletar() {
-    const db = await SQLite.openDatabaseAsync("PAM2");
-    if (db) {
-      await db.runAsync(
-        "DELETE FROM TB_usuarios WHERE Nome = ?",
-        [nomeParaDeletar] // Passando o nome a ser deletado dinamicamente
-      );
-      console.log(`Usuário ${nomeParaDeletar} deletado com sucesso`);
-    } else {
-      console.log("Erro ao acessar o banco");
+    if (!nome.trim()) {
+      Alert.alert("Erro", "Digite um nome válido para deletar.");
+      return;
+    }
+
+    try {
+      await db.runAsync("DELETE FROM TB_usuarios WHERE Nome = ?", [nome]);
+      console.log(`Usuário ${nome} deletado`);
+      setNome("");
+      exibir();
+    } catch (error) {
+      console.error("Erro ao deletar:", error);
+    }
+  }
+
+  async function atualizar() {
+    if (!nomeAntigo.trim() || !nomeNovo.trim()) {
+      Alert.alert("Erro", "Preencha os dois nomes para atualizar.");
+      return;
+    }
+
+    try {
+      await db.runAsync("UPDATE TB_usuarios SET Nome = ? WHERE Nome = ?", [
+        nomeNovo,
+        nomeAntigo,
+      ]);
+      console.log(`Usuário ${nomeAntigo} atualizado para ${nomeNovo}`);
+      setNomeAntigo("");
+      setNomeNovo("");
+      exibir();
+    } catch (error) {
+      console.error("Erro ao atualizar:", error);
     }
   }
 
   return (
-    <View>
-      <View style={{ marginBottom: 10 }}>
-        <Button title="Criar banco" onPress={() => criaBanco()} />
+    <ScrollView contentContainerStyle={{ padding: 20 }}>
+      <Text style={{ fontSize: 20, marginBottom: 10 }}>CRUD de Usuários</Text>
+
+      <TextInput
+        style={inputStyle}
+        placeholder="Nome"
+        value={nome}
+        onChangeText={setNome}
+      />
+      <Button title="Inserir" onPress={inserir} />
+
+      <View style={{ height: 10 }} />
+
+      <Button title="Exibir Todos" onPress={exibir} />
+
+      <View style={{ marginVertical: 20 }}>
+        {usuarios.map((user) => (
+          <Text key={user.id}>
+            ID: {user.id} - Nome: {user.Nome}
+          </Text>
+        ))}
       </View>
 
-      <View style={{ marginBottom: 10 }}>
-        <Button title="Criar tabela" onPress={() => criarTabela()} />
-      </View>
+      <Button title="Deletar pelo nome" onPress={deletar} />
 
-      <View style={{ marginBottom: 10 }}>
-        <Button title="Inserir" onPress={() => inserir()} />
-      </View>
+      <View style={{ height: 30 }} />
 
-      <View style={{ marginBottom: 10 }}>
-        <Button title="Exibir" onPress={() => exibir()} />
-      </View>
+      <Text style={{ fontWeight: "bold" }}>Atualizar Nome</Text>
 
-      {/* Novo campo de entrada para o nome a ser deletado */}
-      <View style={{ marginBottom: 10 }}>
-        <TextInput
-          style={{
-            width: 240,
-            height: 40,
-            borderColor: "gray",
-            borderWidth: 1,
-            marginBottom: 10,
-            paddingLeft: 8,
-          }}
-          placeholder="Digite o nome para deletar"
-          value={nomeParaDeletar}
-          onChangeText={setNomeParaDeletar} // Atualizando o valor do nome para deletar
-        />
-      </View>
-
-      <View style={{ marginBottom: 10 }}>
-        <Button title="Deletar" onPress={() => deletar()} />
-      </View>
-    </View>
+      <TextInput
+        style={inputStyle}
+        placeholder="Nome antigo"
+        value={nomeAntigo}
+        onChangeText={setNomeAntigo}
+      />
+      <TextInput
+        style={inputStyle}
+        placeholder="Novo nome"
+        value={nomeNovo}
+        onChangeText={setNomeNovo}
+      />
+      <Button title="Atualizar" onPress={atualizar} />
+    </ScrollView>
   );
 };
 
-export default banco;
+const inputStyle = {
+  height: 40,
+  borderColor: "gray",
+  borderWidth: 1,
+  marginBottom: 10,
+  paddingLeft: 8,
+};
+
+export default Banco;
